@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import ytdl from 'ytdl-core';
+import { Innertube } from 'youtubei.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Enable CORS
@@ -20,31 +20,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const youtube = await Innertube.create();
+    const info = await youtube.getInfo(videoId);
 
-    // Validate video
-    const info = await ytdl.getInfo(videoUrl);
-
-    // Get audio formats
-    const audioFormats = ytdl.filterFormats(info.formats, 'audioonly');
-
-    if (audioFormats.length === 0) {
-      return res.status(404).json({ error: 'No audio formats found' });
-    }
-
-    // Get the best audio format
-    const bestAudio = audioFormats.reduce((prev, current) => {
-      const prevBitrate = prev.audioBitrate || 0;
-      const currentBitrate = current.audioBitrate || 0;
-      return currentBitrate > prevBitrate ? current : prev;
+    // Get audio format
+    const format = info.chooseFormat({
+      quality: 'best',
+      type: 'audio'
     });
 
-    // Return the stream URL
+    if (!format) {
+      return res.status(404).json({ error: 'No audio format found' });
+    }
+
+    // Decipher the URL if needed
+    const url = format.decipher(youtube.session.player);
+
     res.status(200).json({
-      url: bestAudio.url,
-      format: bestAudio.mimeType,
-      bitrate: bestAudio.audioBitrate,
-      duration: info.videoDetails.lengthSeconds,
+      url: url,
+      format: format.mime_type,
+      bitrate: format.bitrate,
+      duration: info.basic_info.duration || 0,
     });
   } catch (error) {
     console.error('Stream error:', error);

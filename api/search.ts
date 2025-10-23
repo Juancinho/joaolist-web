@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import yts from 'youtube-sr';
+import { Innertube } from 'youtubei.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Enable CORS
@@ -20,39 +20,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Search for music videos
-    const results = await yts.search(q, {
-      limit: 20,
-      type: 'video',
-    });
+    const youtube = await Innertube.create();
+    const search = await youtube.search(q, { type: 'video' });
 
-    // Filter and format results
-    const songs = results
-      .filter((video) => {
+    const songs = search.videos
+      .filter((video: any) => {
+        if (!video.id || !video.duration) return false;
+
+        const title = video.title?.text?.toLowerCase() || '';
+        const channel = video.author?.name?.toLowerCase() || '';
+
         // Filter out non-music content
-        const title = video.title?.toLowerCase() || '';
-        const channel = video.channel?.name?.toLowerCase() || '';
-
-        // Exclude common non-music keywords
         const excludeKeywords = [
           'podcast', 'tutorial', 'review', 'unboxing',
-          'gameplay', 'vlog', 'interview', 'reaction'
+          'gameplay', 'vlog', 'interview', 'reaction', 'trailer',
+          'news', 'documentary'
         ];
 
-        const hasExcluded = excludeKeywords.some(keyword =>
+        return !excludeKeywords.some(keyword =>
           title.includes(keyword) || channel.includes(keyword)
         );
-
-        return !hasExcluded && video.duration && video.id;
       })
-      .map((video) => ({
-        id: video.id || '',
-        videoId: video.id || '',
-        title: video.title || 'Unknown',
-        artist: video.channel?.name || 'Unknown Artist',
-        duration: parseDuration(video.duration || '0:00'),
-        thumbnailUrl: video.thumbnail?.url || video.thumbnail?.displayThumbnailURL() || '',
-        views: video.views,
+      .slice(0, 20)
+      .map((video: any) => ({
+        id: video.id,
+        videoId: video.id,
+        title: video.title?.text || 'Unknown',
+        artist: video.author?.name || 'Unknown Artist',
+        duration: video.duration?.seconds || 0,
+        thumbnailUrl: video.best_thumbnail?.url || '',
+        views: video.view_count?.text || '0',
       }));
 
     res.status(200).json({
@@ -68,15 +65,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
-}
-
-function parseDuration(duration: string): number {
-  const parts = duration.split(':').map(Number).reverse();
-  let seconds = 0;
-
-  if (parts[0]) seconds += parts[0]; // seconds
-  if (parts[1]) seconds += parts[1] * 60; // minutes
-  if (parts[2]) seconds += parts[2] * 3600; // hours
-
-  return seconds;
 }
