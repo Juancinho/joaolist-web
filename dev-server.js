@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { Innertube } from 'youtubei.js';
+import yts from 'yt-search';
 
 const app = express();
 const PORT = 3001;
@@ -21,20 +21,18 @@ app.get('/api/search', async (req, res) => {
   try {
     console.log(`🔍 Searching for: ${q}`);
 
-    const youtube = await Innertube.create();
-    const search = await youtube.search(q, { type: 'video' });
+    const results = await yts(q);
 
-    const songs = search.videos
+    const songs = results.videos
       .filter((video) => {
-        if (!video.id || !video.duration) return false;
+        if (!video.videoId || !video.duration) return false;
 
-        const title = video.title?.text?.toLowerCase() || '';
+        const title = video.title?.toLowerCase() || '';
         const channel = video.author?.name?.toLowerCase() || '';
 
         const excludeKeywords = [
           'podcast', 'tutorial', 'review', 'unboxing',
-          'gameplay', 'vlog', 'interview', 'reaction', 'trailer',
-          'news', 'documentary'
+          'gameplay', 'vlog', 'interview', 'reaction', 'trailer'
         ];
 
         return !excludeKeywords.some(keyword =>
@@ -43,13 +41,13 @@ app.get('/api/search', async (req, res) => {
       })
       .slice(0, 20)
       .map((video) => ({
-        id: video.id,
-        videoId: video.id,
-        title: video.title?.text || 'Unknown',
+        id: video.videoId,
+        videoId: video.videoId,
+        title: video.title || 'Unknown',
         artist: video.author?.name || 'Unknown Artist',
-        duration: video.duration?.seconds || 0,
-        thumbnailUrl: video.best_thumbnail?.url || '',
-        views: video.view_count?.text || '0',
+        duration: video.duration?.seconds || video.timestamp || 0,
+        thumbnailUrl: video.thumbnail || video.image || '',
+        views: video.views || 0,
       }));
 
     console.log(`✅ Found ${songs.length} songs`);
@@ -76,28 +74,15 @@ app.get('/api/stream', async (req, res) => {
   try {
     console.log(`🎵 Getting stream for: ${videoId}`);
 
-    const youtube = await Innertube.create();
-    const info = await youtube.getInfo(videoId);
-
-    const format = info.chooseFormat({
-      quality: 'best',
-      type: 'audio'
-    });
-
-    if (!format) {
-      return res.status(404).json({ error: 'No audio format found' });
-    }
-
-    const url = format.decipher(youtube.session.player);
-
-    console.log(`✅ Stream URL obtained, bitrate: ${format.bitrate}`);
-
+    // Return YouTube embed URL - frontend handles it with IFrame API
     res.json({
-      url: url,
-      format: format.mime_type,
-      bitrate: format.bitrate,
-      duration: info.basic_info.duration || 0,
+      url: `https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1`,
+      videoId: videoId,
+      format: 'youtube-embed',
+      duration: 0,
     });
+
+    console.log(`✅ Returned embed URL`);
   } catch (error) {
     console.error('❌ Stream error:', error);
     res.status(500).json({
@@ -112,5 +97,6 @@ app.listen(PORT, () => {
   console.log('\n📡 Available endpoints:');
   console.log(`  🔍 Search: http://localhost:${PORT}/api/search?q=query`);
   console.log(`  🎶 Stream: http://localhost:${PORT}/api/stream?videoId=id`);
-  console.log('\n💡 Now run "npm run dev" in another terminal to start the frontend\n');
+  console.log('\n💡 Now run "npm run dev" in another terminal to start the frontend');
+  console.log('🎼 Music playback uses YouTube IFrame Player API\n');
 });

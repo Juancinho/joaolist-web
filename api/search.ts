@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { Innertube } from 'youtubei.js';
+import yts from 'yt-search';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Enable CORS
@@ -20,21 +20,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const youtube = await Innertube.create();
-    const search = await youtube.search(q, { type: 'video' });
+    const results = await yts(q);
 
-    const songs = search.videos
+    const songs = results.videos
       .filter((video: any) => {
-        if (!video.id || !video.duration) return false;
+        if (!video.videoId || !video.duration) return false;
 
-        const title = video.title?.text?.toLowerCase() || '';
+        const title = video.title?.toLowerCase() || '';
         const channel = video.author?.name?.toLowerCase() || '';
 
-        // Filter out non-music content
         const excludeKeywords = [
           'podcast', 'tutorial', 'review', 'unboxing',
-          'gameplay', 'vlog', 'interview', 'reaction', 'trailer',
-          'news', 'documentary'
+          'gameplay', 'vlog', 'interview', 'reaction', 'trailer'
         ];
 
         return !excludeKeywords.some(keyword =>
@@ -43,13 +40,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       .slice(0, 20)
       .map((video: any) => ({
-        id: video.id,
-        videoId: video.id,
-        title: video.title?.text || 'Unknown',
+        id: video.videoId,
+        videoId: video.videoId,
+        title: video.title || 'Unknown',
         artist: video.author?.name || 'Unknown Artist',
-        duration: video.duration?.seconds || 0,
-        thumbnailUrl: video.best_thumbnail?.url || '',
-        views: video.view_count?.text || '0',
+        duration: video.duration?.seconds || video.timestamp || 0,
+        thumbnailUrl: video.thumbnail || video.image || '',
+        views: video.views || 0,
       }));
 
     res.status(200).json({

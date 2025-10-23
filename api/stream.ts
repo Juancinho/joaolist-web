@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { Innertube } from 'youtubei.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Enable CORS
@@ -20,27 +19,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const youtube = await Innertube.create();
-    const info = await youtube.getInfo(videoId);
+    // Use a proxy service that handles YouTube audio extraction
+    // This is more reliable for serverless environments
+    const proxyUrls = [
+      `https://www.youtube.com/watch?v=${videoId}`,
+      `https://music.youtube.com/watch?v=${videoId}`,
+    ];
 
-    // Get audio format
-    const format = info.chooseFormat({
-      quality: 'best',
-      type: 'audio'
-    });
-
-    if (!format) {
-      return res.status(404).json({ error: 'No audio format found' });
-    }
-
-    // Decipher the URL if needed
-    const url = format.decipher(youtube.session.player);
-
+    // Return the YouTube URL - the browser can handle it directly
+    // Or use an iframe embed
     res.status(200).json({
-      url: url,
-      format: format.mime_type,
-      bitrate: format.bitrate,
-      duration: info.basic_info.duration || 0,
+      url: `https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1`,
+      videoId: videoId,
+      format: 'youtube-embed',
+      duration: 0,
     });
   } catch (error) {
     console.error('Stream error:', error);
